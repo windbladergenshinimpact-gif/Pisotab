@@ -2,44 +2,38 @@ name: Build PisoTab APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Setup Android
         uses: android-actions/setup-android@v4
-
-      - name: Install Android SDK
-        shell: bash
-        run: |
-          set -e
-          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Extract PisoTab source
-        shell: bash
-        run: |
-          set -e
+      - name: Extract source
+        run: unzip -q PisoTab_NonDeviceOwner_AdminLauncher_HomeLauncher_TopCorner_Timer_v4_FIXED_SOURCE.zip -d build_project
 
-          ZIP="PisoTab_NonDeviceOwner_AdminLauncher_HomeLauncher_TopCorner_Timer_v4_FIXED_SOURCE.zip"
+      - name: Build APK
+        run: cd build_project && gradle clean assembleDebug --stacktrace
 
-          if [ ! -f "$ZIP" ]; then
-            echo "
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PisoTab-FIXED-APK
+          path: build_project/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
