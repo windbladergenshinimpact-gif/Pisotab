@@ -20,58 +20,42 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Find PisoTab source ZIP
         shell: bash
         run: |
           set -e
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+          ZIP="PisoTab_TOPLEFT_HOME_NO_SWIPE_SETTINGS_v7_SOURCE.zip"
 
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-
-          if [ ! -f "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" \
-              -type f -name sdkmanager | head -n 1)
-          fi
-
-          if [ -z "$SDKMANAGER" ] || [ ! -f "$SDKMANAGER" ]; then
-            echo "ERROR: sdkmanager not found"
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: Source ZIP not found."
+            echo "Repository files:"
+            ls -lah
             exit 1
           fi
 
-          echo "Using: $SDKMANAGER"
-
-          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-
-          "$SDKMANAGER" \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
+          echo "Found:"
+          ls -lh "$ZIP"
 
       - name: Extract PisoTab source
         shell: bash
         run: |
           set -e
 
-          ZIP="PisoTab_Launcher_Icons_Coin_FIXED_SOURCE_v2.zip"
-
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: $ZIP not found"
-            echo "Files in repository:"
-            ls -lah
-            exit 1
-          fi
-
           rm -rf build_project
           mkdir -p build_project
 
-          unzip -q "$ZIP" -d build_project
+          unzip -q \
+            "PisoTab_TOPLEFT_HOME_NO_SWIPE_SETTINGS_v7_SOURCE.zip" \
+            -d build_project
 
-          echo "Extracted files:"
-          find build_project -maxdepth 4 -type f | sort
+          echo "Extracted source:"
+          find build_project -maxdepth 3 -type f | sort
 
-      - name: Find Android project
+      - name: Locate Gradle project
         shell: bash
         run: |
           set -e
@@ -80,77 +64,4 @@ jobs:
 
           if [ -f "build_project/settings.gradle.kts" ]; then
             PROJECT_DIR="build_project"
-          else
-            PROJECT_DIR=$(find build_project \
-              -type f \
-              -name "settings.gradle.kts" \
-              -print -quit | xargs -r dirname)
-          fi
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Gradle project not found."
-            exit 1
-          fi
-
-          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
-            echo "ERROR: app/build.gradle.kts not found"
-            exit 1
-          fi
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-          echo "Android project:"
-          echo "$PROJECT_DIR"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Build PisoTab APK
-        shell: bash
-        run: |
-          set -e
-
-          cd "$PROJECT_DIR"
-
-          echo "Building from:"
-          pwd
-
-          echo "Project files:"
-          ls -lah
-
-          gradle clean assembleDebug --stacktrace
-
-      - name: Find APK
-        shell: bash
-        run: |
-          set -e
-
-          APK=$(find "$PROJECT_DIR/app/build/outputs/apk" \
-            -type f \
-            -name "*.apk" \
-            -print -quit)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK was not generated."
-
-            echo "Checking build outputs:"
-            find "$PROJECT_DIR/app/build/outputs" \
-              -type f 2>/dev/null || true
-
-            exit 1
-          fi
-
-          echo "APK found:"
-          echo "$APK"
-
-          mkdir -p release
-          cp "$APK" release/PisoTab-debug.apk
-
-          ls -lh release/PisoTab-debug.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PisoTab-APK
-          path: release/PisoTab-debug.apk
-          if-no-files-found: error
+          elif
