@@ -20,33 +20,57 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Check project
+      - name: Extract PisoTab source
         shell: bash
         run: |
           set -e
 
-          echo "Current directory:"
-          pwd
+          ZIP="PisoTab_NonDeviceOwner_AdminLauncher_ActualAPK_Whitelist_Launcher_FIXED_BUILD_APK_v2.zip"
 
-          echo "Project files:"
-          ls -la
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: Source ZIP not found:"
+            echo "$ZIP"
+            exit 1
+          fi
+
+          rm -rf build_project
+          mkdir -p build_project
+
+          unzip -q "$ZIP" -d build_project
+
+          echo "Extracted project:"
+          find build_project -maxdepth 3 -type f | sort
+
+      - name: Check Android project
+        shell: bash
+        run: |
+          set -e
+
+          cd build_project
 
           test -f settings.gradle.kts
           test -f build.gradle.kts
           test -f app/build.gradle.kts
-          test -d app/src
 
-          echo "Gradle project found."
+          echo "Android project found."
+          pwd
+          ls -la
 
       - name: Build APK
         shell: bash
         run: |
           set -e
 
-          chmod +x gradlew
+          cd build_project
 
-          echo "Building PisoTab..."
-          ./gradlew :app:assembleDebug --stacktrace
+          chmod +x gradlew 2>/dev/null || true
+
+          if [ -f "./gradlew" ]; then
+            ./gradlew :app:assembleDebug --stacktrace
+          else
+            echo "Gradle wrapper not included. Using installed Gradle."
+            gradle :app:assembleDebug --stacktrace
+          fi
 
       - name: Find APK
         shell: bash
@@ -55,7 +79,7 @@ jobs:
 
           echo "Searching for generated APK..."
 
-          find app/build/outputs/apk \
+          find build_project/app/build/outputs/apk \
             -type f \
             -name "*.apk" \
             -print
@@ -64,5 +88,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PisoTab-debug-apk
-          path: app/build/outputs/apk/**/*.apk
+          path: build_project/app/build/outputs/apk/**/*.apk
           if-no-files-found: error
