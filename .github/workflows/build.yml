@@ -1,6 +1,9 @@
 name: Build PisoTab APK
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -11,29 +14,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v5
+      - name: Set up JDK
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android
-        uses: android-actions/setup-android@v4
-
-      - name: Setup Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
 
-      - name: Extract source
-        run: unzip -q PisoTab_NonDeviceOwner_AdminLauncher_HomeLauncher_TopCorner_Timer_v4_FIXED_SOURCE.zip -d build_project
+      - name: Make Gradle executable
+        working-directory: build_project/project
+        run: chmod +x gradlew
 
-      - name: Build APK
-        run: cd build_project && gradle clean assembleDebug --stacktrace
+      - name: Build Debug APK
+        working-directory: build_project/project
+        run: ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PisoTab-FIXED-APK
-          path: build_project/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
+          name: PisoTab-debug-apk
+          path: build_project/project/app/build/outputs/apk/debug/*.apk
