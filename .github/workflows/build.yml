@@ -39,18 +39,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          ZIP="PisoTab_COIN_ADMIN_DPC_ANDROID11_16_SOURCE_v9.zip"
+          ZIP='PisoTab_COIN_ADMIN_DPC_ANDROID11_16_SOURCE_v9.zip'
 
           echo "Using source: $ZIP"
 
-          test -f "$ZIP"
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: Source ZIP not found: $ZIP"
+            echo "ZIP files in repository:"
+            find . -maxdepth 2 -type f -name '*.zip' -print
+            exit 1
+          fi
 
           rm -rf build_project
           mkdir -p build_project
 
           unzip -q -o "$ZIP" -d build_project
-
-          echo "Checking Gradle project..."
 
           test -f build_project/settings.gradle.kts || \
             test -f build_project/settings.gradle
@@ -59,33 +62,34 @@ jobs:
 
           echo "Gradle project verified."
 
-      - name: Verify required PisoTab files
+      - name: Verify required PisoTab components
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "Checking DPC..."
-          test -f build_project/app/src/main/java/*/*/PisoTabDeviceAdminReceiver.kt 2>/dev/null || \
-            find build_project/app/src/main -name 'PisoTabDeviceAdminReceiver.kt' -print -quit | grep -q .
-
-          echo "Checking Device Admin XML..."
-          find build_project/app/src/main -name 'pisotab_device_admin.xml' -print -quit | grep -q .
-
-          echo "Checking Coin..."
-          find build_project/app/src/main -type f \
-            \( -iname '*coin*' -o -iname '*coin_button*' \) \
+          find build_project/app/src/main \
+            -type f \
+            -name 'PisoTabDeviceAdminReceiver.kt' \
             -print -quit | grep -q .
 
-          echo "Required PisoTab components found."
+          find build_project/app/src/main \
+            -type f \
+            -name 'pisotab_device_admin.xml' \
+            -print -quit | grep -q .
 
-      - name: Build PisoTab
+          find build_project/app/src/main \
+            -type f \
+            -iname '*coin*' \
+            -print -quit | grep -q .
+
+          echo "Coin + DPC components found."
+
+      - name: Build PisoTab APK
         shell: bash
         run: |
           set -euo pipefail
 
           cd build_project
-
-          echo "Starting Gradle build..."
 
           gradle clean assembleDebug --stacktrace
 
@@ -99,14 +103,14 @@ jobs:
             -name '*.apk' \
             -print -quit)"
 
-          test -n "$APK"
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            exit 1
+          fi
 
           mkdir -p release
+          cp "$APK" release/PisoTab-DPC-Android11-16-debug.apk
 
-          cp "$APK" \
-            release/PisoTab-DPC-Android11-16-debug.apk
-
-          echo "APK:"
           ls -lh release/PisoTab-DPC-Android11-16-debug.apk
 
       - name: Upload APK
