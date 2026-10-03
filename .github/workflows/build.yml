@@ -18,7 +18,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: "17"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
@@ -26,12 +26,44 @@ jobs:
       - name: Setup Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.11.1'
+          gradle-version: "8.11.1"
 
       - name: Accept Android SDK licenses
-        shell: bash
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
 
-      - name: Install
+      - name: Install Android SDK
+        run: |
+          set -euo pipefail
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+
+      - name: Prepare PisoTab project
+        run: |
+          set -euo pipefail
+
+          ZIP="PisoTab_v10_ADDONLY_SWIPE_30_ICONS_SOURCE_FIXED.zip"
+
+          echo "Using source: $ZIP"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: Source ZIP not found: $ZIP"
+            echo "ZIP files available:"
+            find . -maxdepth 2 -type f -name '*.zip' -print
+            exit 1
+          fi
+
+          rm -rf build_project
+          mkdir -p build_project
+
+          unzip -q -o "$ZIP" -d build_project
+
+          if [ ! -f "build_project/settings.gradle.kts" ]; then
+            echo "ERROR: settings.gradle.kts not found."
+            find build_project -maxdepth 6 -type f -print
+            exit 1
+          fi
+
+          if [ !
