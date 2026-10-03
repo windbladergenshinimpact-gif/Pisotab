@@ -25,15 +25,113 @@ jobs:
         with:
           gradle-version: '8.11'
 
-      - name: Check source ZIP
+      - name: Find source ZIP
+        shell: bash
         run: |
-          echo "Checking repository..."
+          set -e
+
+          echo "Repository files:"
           ls -lah
-          test -f "PisoTab_TOPLEFT_HOME_NO_SWIPE_SETTINGS_v7_SOURCE.zip"
+
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname "*.zip" -print -quit)
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: No ZIP file found."
+            exit 1
+          fi
+
+          echo "Found source ZIP:"
+          echo "$ZIP_FILE"
+
+          echo "SOURCE_ZIP=$ZIP_FILE" >> "$GITHUB_ENV"
 
       - name: Extract PisoTab source
+        shell: bash
         run: |
+          set -e
+
           rm -rf build_project
           mkdir -p build_project
 
-          unzip -
+          echo "Extracting:"
+          echo "$SOURCE_ZIP"
+
+          unzip -q -o "$SOURCE_ZIP" -d build_project
+
+          echo "Extracted source:"
+          find build_project -maxdepth 3 -type f | sort
+
+      - name: Locate Gradle project
+        shell: bash
+        run: |
+          set -e
+
+          echo "Searching for Gradle project..."
+
+          SETTINGS_FILE=$(find build_project \
+            \( -name "settings.gradle" -o -name "settings.gradle.kts" \) \
+            -type f -print -quit)
+
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "ERROR: settings.gradle not found."
+
+            echo "Files found:"
+            find build_project -maxdepth 5 -type f | sort
+
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS_FILE")
+
+          echo "Gradle project:"
+          echo "$PROJECT_DIR"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Check Gradle project
+        shell: bash
+        run: |
+          set -e
+
+          echo "Project directory:"
+          echo "$PROJECT_DIR"
+
+          echo ""
+          echo "Project files:"
+          ls -lah "$PROJECT_DIR"
+
+          echo ""
+          echo "Gradle version:"
+          gradle --version
+
+      - name: Build PisoTab APK
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "Building PisoTab APK..."
+
+          gradle assembleDebug --no-daemon
+
+      - name: Find APK
+        shell: bash
+        run: |
+          set -e
+
+          echo "Searching for APK..."
+
+          find "$PROJECT_DIR" \
+            -type f \
+            -name "*.apk" \
+            -print
+
+      - name: Upload PisoTab APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PisoTab-debug-apk
+          path: |
+            ${{ env.PROJECT_DIR }}/**/build/outputs/apk/**/*.apk
+            ${{ env.PROJECT_DIR }}/**/build/outputs/apk/*.apk
+          if-no-files-found: error
