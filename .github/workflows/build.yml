@@ -25,8 +25,6 @@ jobs:
         run: |
           set -e
 
-          echo "ANDROID_HOME=$ANDROID_HOME"
-
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
 
           if [ ! -x "$SDKMANAGER" ]; then
@@ -38,7 +36,7 @@ jobs:
             exit 1
           fi
 
-          echo "Using: $SDKMANAGER"
+          echo "Using sdkmanager: $SDKMANAGER"
 
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
 
@@ -47,47 +45,86 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Check PisoTab project
+      - name: Extract PisoTab source
         shell: bash
         run: |
           set -e
 
-          echo "Project directory:"
-          pwd
+          ZIP_FILE=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
 
-          echo "Project contents:"
-          ls -la
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: PisoTab source ZIP not found"
+            exit 1
+          fi
 
-          test -f settings.gradle.kts
-          test -f build.gradle.kts
-          test -f app/build.gradle.kts
-          test -d app/src
+          echo "Using source ZIP: $ZIP_FILE"
 
-          echo "PisoTab project OK"
+          mkdir -p build_project
+          unzip -o "$ZIP_FILE" -d build_project
+
+          echo "Extracted files:"
+          find build_project -maxdepth 3 -type f | sort
+
+      - name: Verify PisoTab project
+        shell: bash
+        working-directory: build_project
+        run: |
+          set -e
+
+          echo "Searching for Gradle project..."
+
+          PROJECT_DIR="."
+
+          if [ ! -f "settings.gradle.kts" ]; then
+            PROJECT_DIR=$(find . -name "settings.gradle.kts" -printf '%h\n' | head -n 1)
+          fi
+
+          if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/settings.gradle.kts" ]; then
+            echo "ERROR: settings.gradle.kts not found"
+            exit 1
+          fi
+
+          echo "Gradle project: $PROJECT_DIR"
+
+          test -f "$PROJECT_DIR/build.gradle.kts"
+          test -f "$PROJECT_DIR/app/build.gradle.kts"
+          test -d "$PROJECT_DIR/app/src"
+
+          echo "PisoTab project structure OK."
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build PisoTab APK
         shell: bash
+        working-directory: build_project
         run: |
           set -e
 
-          echo "Starting PisoTab build..."
+          PROJECT_DIR="."
+
+          if [ ! -f "settings.gradle.kts" ]; then
+            PROJECT_DIR=$(find . -name "settings.gradle.kts" -printf '%h\n' | head -n 1)
+          fi
+
+          echo "Building from: $PROJECT_DIR"
+
+          cd "$PROJECT_DIR"
 
           gradle :app:assembleDebug --no-daemon
 
-      - name: Locate APK
+      - name: Find generated APK
         shell: bash
         run: |
           set -e
 
-          echo "Generated APK files:"
-          find app/build/outputs -type f -name "*.apk" -print
+          echo "Searching for generated APK..."
+
+          find build_project -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PisoTab-debug-APK
-          path: app/build/outputs/apk/debug/*.apk
+          path: build_project/**/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
