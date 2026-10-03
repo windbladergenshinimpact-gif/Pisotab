@@ -63,26 +63,17 @@ jobs:
 
           unzip -q -o "$ZIP" -d build_project
 
-          echo "Searching for Gradle project..."
+          PROJECT_DIR="build_project"
 
-          PROJECT_DIR=""
-
-          while IFS= read -r settings_file; do
-            PROJECT_DIR="$(dirname "$settings_file")"
-            break
-          done < <(find build_project -type f -name "settings.gradle.kts" -o -name "settings.gradle" -print)
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Gradle settings file not found."
-            echo "Files inside package:"
-            find build_project -maxdepth 6 -type f -print
+          if [ ! -f "$PROJECT_DIR/settings.gradle.kts" ]; then
+            echo "ERROR: settings.gradle.kts not found."
+            echo "Package contents:"
+            find "$PROJECT_DIR" -maxdepth 3 -type f -print
             exit 1
           fi
 
           if [ ! -d "$PROJECT_DIR/app" ]; then
             echo "ERROR: app directory not found."
-            echo "Project files:"
-            find "$PROJECT_DIR" -maxdepth 4 -print
             exit 1
           fi
 
@@ -96,12 +87,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          MAIN="$PROJECT_DIR/app/src/main"
+          test -f "$PROJECT_DIR/settings.gradle.kts"
+          test -f "$PROJECT_DIR/build.gradle.kts"
+          test -f "$PROJECT_DIR/app/build.gradle.kts"
+          test -f "$PROJECT_DIR/app/src/main/AndroidManifest.xml"
+          test -f "$PROJECT_DIR/app/src/main/res/layout/activity_main.xml"
 
-          test -f "$MAIN/java/com/example/pisotab/MainActivity.kt"
-          test -f "$MAIN/res/layout/activity_main.xml"
-
-          echo "PisoTab launcher files found."
+          echo "PisoTab project files verified."
 
       - name: Build PisoTab APK
         shell: bash
@@ -109,3 +101,43 @@ jobs:
           set -euo pipefail
 
           cd "$PROJECT_DIR"
+
+          echo "Project directory:"
+          pwd
+
+          echo "Building PisoTab APK..."
+
+          gradle clean assembleDebug --stacktrace
+
+      - name: Find APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK=""
+
+          while IFS= read -r apk_file
+          do
+            APK="$apk_file"
+            break
+          done < <(find "$PROJECT_DIR/app/build/outputs" -type f -name "*.apk" -print)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            find "$PROJECT_DIR/app/build/outputs" -maxdepth 6 -type f -print 2>/dev/null || true
+            exit 1
+          fi
+
+          mkdir -p release
+
+          cp "$APK" "release/PisoTab-DPC-Android11-16-v10-debug.apk"
+
+          echo "APK created:"
+          ls -lh "release/PisoTab-DPC-Android11-16-v10-debug.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PisoTab-DPC-Android11-16-v10
+          path: release/PisoTab-DPC-Android11-16-v10-debug.apk
+          if-no-files-found: error
