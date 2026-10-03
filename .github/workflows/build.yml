@@ -20,69 +20,42 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Find Android project
+      - name: Check project
         shell: bash
         run: |
           set -e
 
-          echo "Repository:"
+          echo "Current directory:"
           pwd
-          echo
 
-          echo "Searching for Gradle project..."
-          find . -maxdepth 5 -name settings.gradle -o -name settings.gradle.kts
-
-      - name: Locate project
-        shell: bash
-        run: |
-          set -e
-
-          if [ -f "build_project/settings.gradle.kts" ]; then
-            echo "PROJECT_DIR=build_project" >> "$GITHUB_ENV"
-          elif [ -f "build_project/settings.gradle" ]; then
-            echo "PROJECT_DIR=build_project" >> "$GITHUB_ENV"
-          elif [ -f "settings.gradle.kts" ]; then
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
-          elif [ -f "settings.gradle" ]; then
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
-          else
-            echo "ERROR: Gradle project not found."
-            exit 1
-          fi
-
-      - name: Check Gradle project
-        shell: bash
-        run: |
-          set -e
-
-          echo "Project directory: $PROJECT_DIR"
-          cd "$PROJECT_DIR"
-
-          test -f gradlew
-          chmod +x gradlew
-
-          echo "Gradle project found."
-          echo
+          echo "Project files:"
           ls -la
 
-      - name: Build Debug APK
+          test -f settings.gradle.kts
+          test -f build.gradle.kts
+          test -f app/build.gradle.kts
+          test -d app/src
+
+          echo "Gradle project found."
+
+      - name: Build APK
         shell: bash
         run: |
           set -e
 
-          cd "$PROJECT_DIR"
+          chmod +x gradlew
 
-          echo "Building PisoTab APK..."
+          echo "Building PisoTab..."
           ./gradlew :app:assembleDebug --stacktrace
 
-      - name: Find generated APK
+      - name: Find APK
         shell: bash
         run: |
           set -e
 
           echo "Searching for generated APK..."
 
-          find "$PROJECT_DIR/app/build/outputs/apk" \
+          find app/build/outputs/apk \
             -type f \
             -name "*.apk" \
             -print
@@ -91,6 +64,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PisoTab-debug-apk
-          path: |
-            ${{ env.PROJECT_DIR }}/app/build/outputs/apk/**/*.apk
+          path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
