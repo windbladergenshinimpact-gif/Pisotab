@@ -29,7 +29,7 @@ jobs:
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
@@ -44,23 +44,38 @@ jobs:
           echo "Using source:"
           echo "$ZIP"
 
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: Source ZIP not found."
-            exit 1
-          fi
+          test -f "$ZIP"
 
           rm -rf build_project
           mkdir -p build_project
 
           unzip -q -o "$ZIP" -d build_project
 
-          PROJECT_DIR=$(find build_project -type f \
-            -name "settings.gradle.kts" -o -name "settings.gradle" \
-            -printf "%h\n" | head -n 1)
+          echo "Extracted files:"
+          ls -lah build_project
+
+          PROJECT_DIR=""
+
+          while IFS= read -r settings_file; do
+            PROJECT_DIR="$(dirname "$settings_file")"
+            break
+          done < <(
+            find build_project -type f -name 'settings.gradle.kts' -print
+          )
 
           if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Gradle project not found inside ZIP."
-            find build_project -maxdepth 5 -type f | sort
+            while IFS= read -r settings_file; do
+              PROJECT_DIR="$(dirname "$settings_file")"
+              break
+            done < <(
+              find build_project -type f -name 'settings.gradle' -print
+            )
+          fi
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Gradle settings file not found."
+            echo "Files inside ZIP:"
+            find build_project -maxdepth 5 -type f -print
             exit 1
           fi
 
@@ -69,7 +84,7 @@ jobs:
 
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Verify PisoTab source
+      - name: Verify PisoTab project
         shell: bash
         run: |
           set -euo pipefail
@@ -82,8 +97,10 @@ jobs:
           echo "Project files:"
           ls -lah
 
-          test -f settings.gradle.kts || test -f settings.gradle
-          test -d app
+          if [ ! -d "app" ]; then
+            echo "ERROR: app directory not found."
+            exit 1
+          fi
 
           echo "Gradle project verified."
 
@@ -96,4 +113,32 @@ jobs:
 
           echo "Building PisoTab APK..."
 
-          grad
+          gradle clean assembleDebug --stacktrace
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK="$(find "$PROJECT_DIR/app/build/outputs/apk/debug" \
+            -type f \
+            -name '*.apk' \
+            -print -quit || true)"
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            exit 1
+          fi
+
+          mkdir -p release
+          cp "$APK" release/PisoTab-debug.apk
+
+          echo "APK created:"
+          ls -lh release/PisoTab-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PisoTab-APK
+          path: release/PisoTab-debug.apk
+          if-no-files-found: error
