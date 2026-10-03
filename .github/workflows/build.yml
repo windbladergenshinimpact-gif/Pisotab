@@ -23,116 +23,30 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Install Android SDK
-        run: |
-          sdkmanager 'platform-tools'
-          sdkmanager 'platforms;android-35'
-          sdkmanager 'build-tools;35.0.0'
-
       - name: Setup Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Extract PisoTab v9
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+
+      - name: Verify PisoTab project
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP="PisoTab_MASTER_PLAN_AND_FILES_v9_LOCKED_COMPLETE_BUILD_YML.zip"
-
-          echo "Using source:"
-          echo "$ZIP"
-
-          test -f "$ZIP"
-
-          rm -rf build_project
-          mkdir -p build_project
-
-          unzip -q -o "$ZIP" -d build_project
-
-          echo "Searching for Gradle project..."
-
-          PROJECT_DIR=""
-
-          while IFS= read -r settings_file; do
-            PROJECT_DIR="$(dirname "$settings_file")"
-            break
-          done < <(
-            find build_project -type f \
-              -name 'settings.gradle.kts' \
-              -print
-          )
-
-          if [ -z "$PROJECT_DIR" ]; then
-            while IFS= read -r settings_file; do
-              PROJECT_DIR="$(dirname "$settings_file")"
-              break
-            done < <(
-              find build_project -type f \
-                -name 'settings.gradle' \
-                -print
-            )
-          fi
-
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Gradle settings file not found."
-
-            echo "Files inside package:"
-            find build_project -maxdepth 7 -type f -print
-
-            exit 1
-          fi
-
-          if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: app directory not found."
-            echo "Project directory:"
-            echo "$PROJECT_DIR"
-            exit 1
-          fi
-
-          echo "Gradle project:"
-          echo "$PROJECT_DIR"
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Build PisoTab
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cd "$PROJECT_DIR"
-
-          echo "Building PisoTab..."
-
-          gradle clean assembleDebug --stacktrace
-
-      - name: Find APK
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          APK="$(find "$PROJECT_DIR/app/build/outputs" \
-            -type f \
-            -name '*.apk' \
-            -print -quit)"
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK was not generated."
-            exit 1
-          fi
-
-          echo "APK found:"
-          echo "$APK"
-
-          mkdir -p release
-
-          cp "$APK" \
-            release/PisoTab-DPC-Android11-16-debug.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PisoTab-DPC-Android11-16
-          path: release/PisoTab-DPC-Android11-16-debug.apk
-          if-no-files-found: error
+          if [ -f "settings.gradle.kts" ]; then
+            echo "Found settings.gradle.kts"
+          elif [ -f "settings.gradle" ]; then
