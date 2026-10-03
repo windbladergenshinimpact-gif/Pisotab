@@ -20,31 +20,42 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Accept Android SDK licenses
-        shell: bash
-        run: |
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-35" \
-            "build-tools;35.0.0"
-
-      - name: Check project structure
+      - name: Prepare Android SDK
         shell: bash
         run: |
           set -e
 
-          echo "Current directory:"
+          echo "ANDROID_HOME=$ANDROID_HOME"
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)
+          fi
+
+          if [ -z "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found"
+            exit 1
+          fi
+
+          echo "Using: $SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Check PisoTab project
+        shell: bash
+        run: |
+          set -e
+
+          echo "Project directory:"
           pwd
 
-          echo "Project files:"
+          echo "Project contents:"
           ls -la
 
           test -f settings.gradle.kts
@@ -52,33 +63,31 @@ jobs:
           test -f app/build.gradle.kts
           test -d app/src
 
-          echo "Project structure OK."
+          echo "PisoTab project OK"
 
-      - name: Install Gradle
+      - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APK
+      - name: Build PisoTab APK
         shell: bash
         run: |
           set -e
 
-          echo "Building PisoTab APK..."
+          echo "Starting PisoTab build..."
 
           gradle :app:assembleDebug --no-daemon
 
-      - name: Find generated APK
+      - name: Locate APK
         shell: bash
         run: |
           set -e
 
-          echo "Searching for generated APK..."
-
-          find . -type f -name "*.apk" -print
+          echo "Generated APK files:"
+          find app/build/outputs -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PisoTab-debug-APK
-          path: |
-            app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
