@@ -23,17 +23,6 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: Setup Gradle 8.11.1
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
-
-      - name: Accept Android SDK licenses
-        shell: bash
-        run: |
-          set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-
       - name: Install Android SDK
         shell: bash
         run: |
@@ -42,91 +31,21 @@ jobs:
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
 
-      - name: Prepare PisoTab project
+      - name: Setup Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Extract PisoTab v10 source
         shell: bash
         run: |
           set -euo pipefail
 
-          ZIP="PisoTab_GITHUB_BUILD_PACKAGE_v9_FIXED.zip"
+          ZIP="PisoTab_v10_ADDONLY_SWIPE_30_ICONS_SOURCE.zip"
 
-          echo "Using package:"
-          echo "$ZIP"
+          echo "Using source: $ZIP"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: Package not found: $ZIP"
-            exit 1
-          fi
-
-          rm -rf build_project
-          mkdir -p build_project
-
-          unzip -q -o "$ZIP" -d build_project
-
-          if [ ! -f "build_project/settings.gradle.kts" ] && [ ! -f "build_project/settings.gradle" ]; then
-            echo "ERROR: Gradle settings file not found inside package."
-            echo "Package contents:"
-            find build_project -maxdepth 5 -type f -print
-            exit 1
-          fi
-
-          if [ ! -d "build_project/app" ]; then
-            echo "ERROR: app directory not found inside package."
-            echo "Package directories:"
-            find build_project -maxdepth 3 -type d -print
-            exit 1
-          fi
-
-          echo "PisoTab project found."
-
-          echo "PROJECT_DIR=$GITHUB_WORKSPACE/build_project" >> "$GITHUB_ENV"
-
-      - name: Build PisoTab APK
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cd "$PROJECT_DIR"
-
-          echo "Project directory:"
-          pwd
-
-          echo "Building APK..."
-
-          gradle clean assembleDebug --stacktrace
-
-      - name: Find APK
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          APK=$(find "$PROJECT_DIR/app/build/outputs" \
-            -type f \
-            -name "*.apk" \
-            -print -quit)
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: APK was not generated."
-            echo "Build output:"
-            find "$PROJECT_DIR/app/build/outputs" \
-              -maxdepth 5 \
-              -type f \
-              -print 2>/dev/null || true
-            exit 1
-          fi
-
-          echo "APK found:"
-          echo "$APK"
-
-          mkdir -p release
-
-          cp "$APK" "release/PisoTab-DPC-Android11-16-debug.apk"
-
-          echo "Final APK:"
-          ls -lh "release/PisoTab-DPC-Android11-16-debug.apk"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: PisoTab-DPC-Android11-16
-          path: release/PisoTab-DPC-Android11-16-debug.apk
-          if-no-files-found: error
+            echo "ERROR: Source ZIP not found: $ZIP"
+            echo "Available ZIP files:"
+            find . -maxdepth 2 -type f -name "*.zip" -print
