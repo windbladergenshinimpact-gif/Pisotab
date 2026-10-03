@@ -32,7 +32,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null || true
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
 
       - name: Install Android SDK
         shell: bash
@@ -50,3 +50,52 @@ jobs:
           if [ -f "settings.gradle.kts" ]; then
             echo "Found settings.gradle.kts"
           elif [ -f "settings.gradle" ]; then
+            echo "Found settings.gradle"
+          else
+            echo "ERROR: Gradle settings file not found."
+            echo "Current directory:"
+            pwd
+            echo "Project files:"
+            find . -maxdepth 4 -type f -print
+            exit 1
+          fi
+
+          if [ ! -d "app" ]; then
+            echo "ERROR: app directory not found."
+            exit 1
+          fi
+
+          echo "PisoTab Gradle project verified."
+
+      - name: Build PisoTab APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle clean assembleDebug --stacktrace
+
+      - name: Find APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK="$(find app/build/outputs -type f -name '*.apk' -print -quit)"
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            exit 1
+          fi
+
+          echo "APK found:"
+          echo "$APK"
+
+          mkdir -p release
+          cp "$APK" "release/PisoTab-DPC-Android11-16-debug.apk"
+
+          ls -lh "release/PisoTab-DPC-Android11-16-debug.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PisoTab-DPC-Android11-16
+          path: release/PisoTab-DPC-Android11-16-debug.apk
+          if-no-files-found: error
