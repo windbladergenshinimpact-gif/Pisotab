@@ -11,25 +11,55 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Setup Android SDK
+        shell: bash
+        run: |
+          set -e
+
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+
+          if [ ! -f "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" \
+              -type f -name sdkmanager | head -n 1)
+          fi
+
+          if [ -z "$SDKMANAGER" ] || [ ! -f "$SDKMANAGER" ]; then
+            echo "ERROR: sdkmanager not found"
+            exit 1
+          fi
+
+          echo "Using: $SDKMANAGER"
+
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+
+          "$SDKMANAGER" \
+            "platform-tools" \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
 
       - name: Extract PisoTab source
         shell: bash
         run: |
           set -e
 
-          ZIP="PisoTab_NonDeviceOwner_AdminLauncher_ActualAPK_Whitelist_Launcher_FIXED_BUILD_APK_v2.zip"
+          ZIP="PisoTab_Launcher_Icons_Coin_FIXED_SOURCE_v2.zip"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: Source ZIP not found:"
-            echo "$ZIP"
+            echo "ERROR: $ZIP not found"
+            echo "Files in repository:"
+            ls -lah
             exit 1
           fi
 
@@ -38,55 +68,89 @@ jobs:
 
           unzip -q "$ZIP" -d build_project
 
-          echo "Extracted project:"
-          find build_project -maxdepth 3 -type f | sort
+          echo "Extracted files:"
+          find build_project -maxdepth 4 -type f | sort
 
-      - name: Check Android project
+      - name: Find Android project
         shell: bash
         run: |
           set -e
 
-          cd build_project
+          PROJECT_DIR=""
 
-          test -f settings.gradle.kts
-          test -f build.gradle.kts
-          test -f app/build.gradle.kts
-
-          echo "Android project found."
-          pwd
-          ls -la
-
-      - name: Build APK
-        shell: bash
-        run: |
-          set -e
-
-          cd build_project
-
-          chmod +x gradlew 2>/dev/null || true
-
-          if [ -f "./gradlew" ]; then
-            ./gradlew :app:assembleDebug --stacktrace
+          if [ -f "build_project/settings.gradle.kts" ]; then
+            PROJECT_DIR="build_project"
           else
-            echo "Gradle wrapper not included. Using installed Gradle."
-            gradle :app:assembleDebug --stacktrace
+            PROJECT_DIR=$(find build_project \
+              -type f \
+              -name "settings.gradle.kts" \
+              -print -quit | xargs -r dirname)
           fi
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Gradle project not found."
+            exit 1
+          fi
+
+          if [ ! -f "$PROJECT_DIR/app/build.gradle.kts" ]; then
+            echo "ERROR: app/build.gradle.kts not found"
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+          echo "Android project:"
+          echo "$PROJECT_DIR"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build PisoTab APK
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          echo "Building from:"
+          pwd
+
+          echo "Project files:"
+          ls -lah
+
+          gradle clean assembleDebug --stacktrace
 
       - name: Find APK
         shell: bash
         run: |
           set -e
 
-          echo "Searching for generated APK..."
-
-          find build_project/app/build/outputs/apk \
+          APK=$(find "$PROJECT_DIR/app/build/outputs/apk" \
             -type f \
             -name "*.apk" \
-            -print
+            -print -quit)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated."
+
+            echo "Checking build outputs:"
+            find "$PROJECT_DIR/app/build/outputs" \
+              -type f 2>/dev/null || true
+
+            exit 1
+          fi
+
+          echo "APK found:"
+          echo "$APK"
+
+          mkdir -p release
+          cp "$APK" release/PisoTab-debug.apk
+
+          ls -lh release/PisoTab-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PisoTab-debug-apk
-          path: build_project/app/build/outputs/apk/**/*.apk
+          name: PisoTab-APK
+          path: release/PisoTab-debug.apk
           if-no-files-found: error
