@@ -53,7 +53,7 @@ jobs:
           echo "$ZIP"
 
           if [ ! -f "$ZIP" ]; then
-            echo "ERROR: Package not found."
+            echo "ERROR: Package not found: $ZIP"
             exit 1
           fi
 
@@ -62,8 +62,7 @@ jobs:
 
           unzip -q -o "$ZIP" -d build_project
 
-          if [ ! -f "build_project/settings.gradle.kts" ] &&
-             [ ! -f "build_project/settings.gradle" ]; then
+          if [ ! -f "build_project/settings.gradle.kts" ] && [ ! -f "build_project/settings.gradle" ]; then
             echo "ERROR: Gradle settings file not found inside package."
             echo "Package contents:"
             find build_project -maxdepth 5 -type f -print
@@ -72,6 +71,8 @@ jobs:
 
           if [ ! -d "build_project/app" ]; then
             echo "ERROR: app directory not found inside package."
+            echo "Package directories:"
+            find build_project -maxdepth 3 -type d -print
             exit 1
           fi
 
@@ -98,10 +99,34 @@ jobs:
         run: |
           set -euo pipefail
 
-          APK="$(find "$PROJECT_DIR/app/build/outputs" \
+          APK=$(find "$PROJECT_DIR/app/build/outputs" \
             -type f \
-            -name '*.apk' \
-            -print -quit)"
+            -name "*.apk" \
+            -print -quit)
 
           if [ -z "$APK" ]; then
-            echo "ERROR:
+            echo "ERROR: APK was not generated."
+            echo "Build output:"
+            find "$PROJECT_DIR/app/build/outputs" \
+              -maxdepth 5 \
+              -type f \
+              -print 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "APK found:"
+          echo "$APK"
+
+          mkdir -p release
+
+          cp "$APK" "release/PisoTab-DPC-Android11-16-debug.apk"
+
+          echo "Final APK:"
+          ls -lh "release/PisoTab-DPC-Android11-16-debug.apk"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PisoTab-DPC-Android11-16
+          path: release/PisoTab-DPC-Android11-16-debug.apk
+          if-no-files-found: error
