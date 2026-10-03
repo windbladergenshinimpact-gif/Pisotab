@@ -3,9 +3,8 @@ name: Build PisoTab APK
 on:
   workflow_dispatch:
   push:
-    paths:
-      - "*.zip"
-      - ".github/workflows/build.yml"
+    branches:
+      - main
 
 jobs:
   build:
@@ -15,104 +14,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
-      - name: Set up Gradle
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Setup Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
-
-      - name: Find and extract source ZIP
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          ZIP="PisoTab_v10_ADDONLY_SWIPE_30_ICONS_SMALL.zip"
-
-          echo "Using source: $ZIP"
-
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: Source ZIP not found: $ZIP"
-            echo "ZIP files in repository:"
-            find . -maxdepth 2 -type f -name "*.zip" -print
-            exit 1
-          fi
-
-          rm -rf build_project
-          mkdir -p build_project
-
-          unzip -q -o "$ZIP" -d build_project
-
-          echo "Searching for Gradle project..."
-
-          SETTINGS_FILE=""
-
-          while IFS= read -r file; do
-            SETTINGS_FILE="$file"
-            break
-          done < <(
-            find build_project -type f \
-              \( -name "settings.gradle.kts" -o -name "settings.gradle" \) \
-              -print
-          )
-
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "ERROR: Gradle settings file not found."
-            find build_project -maxdepth 6 -type f -print
-            exit 1
-          fi
-
-          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
-
-          if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: app directory not found."
-            find "$PROJECT_DIR" -maxdepth 5 -print
-            exit 1
-          fi
-
-          echo "Project directory:"
-          echo "$PROJECT_DIR"
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Build PisoTab APK
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cd "$PROJECT_DIR"
-
-          echo "Building PisoTab APK..."
-
-          chmod +x ./gradlew 2>/dev/null || true
-
-          if [ -f "./gradlew" ]; then
-            ./gradlew clean assembleDebug --no-daemon
-          else
-            gradle clean assembleDebug --no-daemon
-          fi
-
-      - name: Verify APK
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
-
-          if [ ! -f "$APK" ]; then
-            echo "ERROR: APK was not created."
-            find "$PROJECT_DIR/app/build/outputs" -type f -print 2>/dev/null || true
-            exit 1
-          fi
-
-          echo "APK created successfully:"
-          ls -lh "$APK"
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
         with:
-          name: PisoTab-v10-small-icons
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          gradle-version: '8.11.1'
+
+      - name: Accept
