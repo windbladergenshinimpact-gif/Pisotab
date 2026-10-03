@@ -11,59 +11,49 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Setup Android SDK
+      - name: Setup Android
         uses: android-actions/setup-android@v4
 
-      - name: Setup Gradle 8.11.1
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
 
-      - name: Accept Android SDK licenses
-        run: |
-          set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-
       - name: Install Android SDK
         run: |
-          set -euo pipefail
           sdkmanager "platform-tools"
           sdkmanager "platforms;android-35"
           sdkmanager "build-tools;35.0.0"
 
-      - name: Prepare PisoTab project
+      - name: Extract PisoTab v10
         run: |
-          set -euo pipefail
-
-          ZIP="PisoTab_v10_ADDONLY_SWIPE_30_ICONS_SOURCE_FIXED.zip"
-
-          echo "Using source: $ZIP"
-
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: Source ZIP not found: $ZIP"
-            echo "ZIP files available:"
-            find . -maxdepth 2 -type f -name '*.zip' -print
-            exit 1
-          fi
-
+          set -e
           rm -rf build_project
           mkdir -p build_project
+          unzip -q -o "PisoTab_v10_ADDONLY_SWIPE_30_ICONS_SOURCE_FIXED.zip" -d build_project
+          echo "ZIP extracted successfully"
+          ls -la build_project
+          ls -la build_project/app
 
-          unzip -q -o "$ZIP" -d build_project
+      - name: Build PisoTab
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/build_project"
+          echo "Building PisoTab..."
+          gradle clean assembleDebug --stacktrace
 
-          if [ ! -f "build_project/settings.gradle.kts" ]; then
-            echo "ERROR: settings.gradle.kts not found."
-            find build_project -maxdepth 6 -type f -print
-            exit 1
-          fi
-
-          if [ !
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: PisoTab-v10-debug
+          path: build_project/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
