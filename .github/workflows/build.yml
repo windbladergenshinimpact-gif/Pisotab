@@ -64,4 +64,13 @@ jobs:
 
           if [ -f "build_project/settings.gradle.kts" ]; then
             PROJECT_DIR="build_project"
-          elif
+          elif [ -f "build_project/settings.gradle" ]; then
+            PROJECT_DIR="build_project"
+          else
+            PROJECT_DIR="$(find build_project -name settings.gradle.kts -o -name settings.gradle | head -n 1 | xargs -r dirname)"
+
+            if [ -z "$PROJECT_DIR" ]; then
+              echo "ERROR: Gradle project not found."
+              echo "Searching for Gradle files:"
+              find build_project -maxdepth 5 -name "settings.gradle*" -o -name "build.gradle*" -print
+             
