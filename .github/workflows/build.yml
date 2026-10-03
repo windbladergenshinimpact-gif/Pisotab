@@ -1,0 +1,45 @@
+name: Build PisoTab APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -e
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Extract PisoTab source
+        shell: bash
+        run: |
+          set -e
+
+          ZIP="PisoTab_NonDeviceOwner_AdminLauncher_HomeLauncher_TopCorner_Timer_v4_FIXED_SOURCE.zip"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "
