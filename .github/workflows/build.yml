@@ -14,25 +14,95 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      - name: Setup Android
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
 
-      - name: Make Gradle executable
-        working-directory: build_project/project
-        run: chmod +x gradlew
+      - name: Find and extract source
+        shell: bash
+        run: |
+          set -e
 
-      - name: Build Debug APK
-        working-directory: build_project/project
-        run: ./gradlew assembleDebug
+          ZIP=$(find . -maxdepth 1 -type f -name "*.zip" | head -n 1)
+
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: No ZIP file found."
+            echo "Files in repository:"
+            find . -maxdepth 2 -type f | sort
+            exit 1
+          fi
+
+          echo "Using ZIP: $ZIP"
+
+          rm -rf build_project
+          mkdir build_project
+
+          unzip -q "$ZIP" -d build_project
+
+          PROJECT_DIR=$(find build_project -type f \( -name "settings.gradle" -o -name "settings.gradle.kts" \) -print -quit)
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Android Gradle project not found."
+            echo "Extracted files:"
+            find build_project -maxdepth 6 -type f | sort
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$PROJECT_DIR")
+
+          echo "Android project found at:"
+          echo "$PROJECT_DIR"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Build APK
+        shell: bash
+        run: |
+          set -e
+
+          cd "$PROJECT_DIR"
+
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew clean assembleDebug --stacktrace
+          else
+            gradle clean assembleDebug --stacktrace
+          fi
+
+      - name: Find APK
+        shell: bash
+        run: |
+          set -e
+
+          APK=$(find "$PROJECT_DIR/app/build/outputs" -type f -name "*.apk" -print -quit)
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            exit 1
+          fi
+
+          echo "APK found:"
+          echo "$APK"
+
+          mkdir -p release
+          cp "$APK" release/PisoTab-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PisoTab-debug-apk
-          path: build_project/project/app/build/outputs/apk/debug/*.apk
+          path: release/PisoTab-debug.apk
+          if-no-files-found: error
