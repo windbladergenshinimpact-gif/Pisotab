@@ -28,4 +28,110 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Accept
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platform-tools"
+          sdkmanager "platforms;android-35"
+          sdkmanager "build-tools;35.0.0"
+
+      - name: Prepare PisoTab project
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP="PisoTab_v11_ADDONLY_SETTINGS_TOPLEFT_CLEAN.zip"
+
+          echo "Using source: $ZIP"
+
+          if [ ! -f "$ZIP" ]; then
+            echo "ERROR: Source ZIP not found: $ZIP"
+            echo "ZIP files in repository:"
+            find . -maxdepth 2 -type f -name "*.zip" -print
+            exit 1
+          fi
+
+          rm -rf build_project
+          mkdir -p build_project
+
+          unzip -q -o "$ZIP" -d build_project
+
+          echo "Searching for Gradle project..."
+
+          PROJECT_DIR=""
+
+          while IFS= read -r settings_file; do
+            PROJECT_DIR="$(dirname "$settings_file")"
+            break
+          done < <(
+            find build_project -type f \( \
+              -name "settings.gradle.kts" \
+              -o -name "settings.gradle" \
+            \) -print
+          )
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Gradle settings file not found."
+            find build_project -maxdepth 6 -type f -print
+            exit 1
+          fi
+
+          if [ ! -d "$PROJECT_DIR/app" ]; then
+            echo "ERROR: app directory not found."
+            find "$PROJECT_DIR" -maxdepth 4 -print
+            exit 1
+          fi
+
+          echo "Gradle project found:"
+          echo "$PROJECT_DIR"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Build PisoTab APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd "$PROJECT_DIR"
+
+          echo "Project directory:"
+          pwd
+
+          echo "Building PisoTab APK..."
+
+          gradle clean assembleDebug --stacktrace
+
+      - name: Find APK
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APK="$(find "$PROJECT_DIR/app/build/outputs" \
+            -type f \
+            -name "*.apk" \
+            -print -quit)"
+
+          if [ -z "$APK" ]; then
+            echo "ERROR: APK was not generated."
+            find "$PROJECT_DIR/app/build/outputs" -type f -print || true
+            exit 1
+          fi
+
+          echo "APK generated:"
+          echo "$APK"
+
+          cp "$APK" "$GITHUB_WORKSPACE/PisoTab_v11_DEBUG.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PisoTab-v11-APK
+          path: PisoTab_v11_DEBUG.apk
+          if-no-files-found: error
