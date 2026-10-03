@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -35,55 +34,84 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Extract PisoTab v8
+      - name: Extract PisoTab v9
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
+
+          ZIP="PisoTab_COIN_ADMIN_DPC_ANDROID11_16_SOURCE_v9.zip"
+
+          echo "Using source: $ZIP"
+
+          test -f "$ZIP"
 
           rm -rf build_project
           mkdir -p build_project
 
-          unzip -q -o \
-            PisoTab_v8_DPC_ANDROID11_16_TINY_ICONS_30_PER_PAGE.zip \
-            -d build_project
+          unzip -q -o "$ZIP" -d build_project
 
-          echo 'PisoTab v8 extracted.'
+          echo "Checking Gradle project..."
 
-          test -f build_project/settings.gradle.kts
+          test -f build_project/settings.gradle.kts || \
+            test -f build_project/settings.gradle
+
           test -d build_project/app
 
-          echo 'Gradle project verified.'
+          echo "Gradle project verified."
 
-      - name: Build PisoTab APK
+      - name: Verify required PisoTab files
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
+
+          echo "Checking DPC..."
+          test -f build_project/app/src/main/java/*/*/PisoTabDeviceAdminReceiver.kt 2>/dev/null || \
+            find build_project/app/src/main -name 'PisoTabDeviceAdminReceiver.kt' -print -quit | grep -q .
+
+          echo "Checking Device Admin XML..."
+          find build_project/app/src/main -name 'pisotab_device_admin.xml' -print -quit | grep -q .
+
+          echo "Checking Coin..."
+          find build_project/app/src/main -type f \
+            \( -iname '*coin*' -o -iname '*coin_button*' \) \
+            -print -quit | grep -q .
+
+          echo "Required PisoTab components found."
+
+      - name: Build PisoTab
+        shell: bash
+        run: |
+          set -euo pipefail
 
           cd build_project
 
-          echo 'Building PisoTab APK...'
+          echo "Starting Gradle build..."
 
           gradle clean assembleDebug --stacktrace
 
       - name: Collect APK
         shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
-          APK=$(find build_project/app/build/outputs -type f -name '*.apk' -print -quit)
+          APK="$(find build_project/app/build/outputs \
+            -type f \
+            -name '*.apk' \
+            -print -quit)"
 
           test -n "$APK"
 
           mkdir -p release
 
-          cp "$APK" release/PisoTab-DPC-Android11-16-debug.apk
+          cp "$APK" \
+            release/PisoTab-DPC-Android11-16-debug.apk
 
-          echo 'APK created:'
+          echo "APK:"
           ls -lh release/PisoTab-DPC-Android11-16-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PisoTab-DPC-Android11-16-APK
+          name: PisoTab-DPC-Android11-16
           path: release/PisoTab-DPC-Android11-16-debug.apk
           if-no-files-found: error
