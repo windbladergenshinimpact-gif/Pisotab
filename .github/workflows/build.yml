@@ -39,66 +39,80 @@ jobs:
         run: |
           set -euo pipefail
 
-          ZIP='PisoTab_COIN_ADMIN_DPC_ANDROID11_16_SOURCE_v9.zip'
+          ZIP="PisoTab_MASTER_PLAN_AND_FILES_v9_LOCKED_COMPLETE_BUILD_YML.zip"
 
-          echo "Using source: $ZIP"
+          echo "Using source:"
+          echo "$ZIP"
 
-          if [ ! -f "$ZIP" ]; then
-            echo "ERROR: Source ZIP not found: $ZIP"
-            echo "ZIP files in repository:"
-            find . -maxdepth 2 -type f -name '*.zip' -print
-            exit 1
-          fi
+          test -f "$ZIP"
 
           rm -rf build_project
           mkdir -p build_project
 
           unzip -q -o "$ZIP" -d build_project
 
-          test -f build_project/settings.gradle.kts || \
-            test -f build_project/settings.gradle
+          echo "Searching for Gradle project..."
 
-          test -d build_project/app
+          PROJECT_DIR=""
 
-          echo "Gradle project verified."
+          while IFS= read -r settings_file; do
+            PROJECT_DIR="$(dirname "$settings_file")"
+            break
+          done < <(
+            find build_project -type f \
+              -name 'settings.gradle.kts' \
+              -print
+          )
 
-      - name: Verify required PisoTab components
+          if [ -z "$PROJECT_DIR" ]; then
+            while IFS= read -r settings_file; do
+              PROJECT_DIR="$(dirname "$settings_file")"
+              break
+            done < <(
+              find build_project -type f \
+                -name 'settings.gradle' \
+                -print
+            )
+          fi
+
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Gradle settings file not found."
+
+            echo "Files inside package:"
+            find build_project -maxdepth 7 -type f -print
+
+            exit 1
+          fi
+
+          if [ ! -d "$PROJECT_DIR/app" ]; then
+            echo "ERROR: app directory not found."
+            echo "Project directory:"
+            echo "$PROJECT_DIR"
+            exit 1
+          fi
+
+          echo "Gradle project:"
+          echo "$PROJECT_DIR"
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Build PisoTab
         shell: bash
         run: |
           set -euo pipefail
 
-          find build_project/app/src/main \
-            -type f \
-            -name 'PisoTabDeviceAdminReceiver.kt' \
-            -print -quit | grep -q .
+          cd "$PROJECT_DIR"
 
-          find build_project/app/src/main \
-            -type f \
-            -name 'pisotab_device_admin.xml' \
-            -print -quit | grep -q .
-
-          find build_project/app/src/main \
-            -type f \
-            -iname '*coin*' \
-            -print -quit | grep -q .
-
-          echo "Coin + DPC components found."
-
-      - name: Build PisoTab APK
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          cd build_project
+          echo "Building PisoTab..."
 
           gradle clean assembleDebug --stacktrace
 
-      - name: Collect APK
+      - name: Find APK
         shell: bash
         run: |
           set -euo pipefail
 
-          APK="$(find build_project/app/build/outputs \
+          APK="$(find "$PROJECT_DIR/app/build/outputs" \
             -type f \
             -name '*.apk' \
             -print -quit)"
@@ -108,10 +122,13 @@ jobs:
             exit 1
           fi
 
-          mkdir -p release
-          cp "$APK" release/PisoTab-DPC-Android11-16-debug.apk
+          echo "APK found:"
+          echo "$APK"
 
-          ls -lh release/PisoTab-DPC-Android11-16-debug.apk
+          mkdir -p release
+
+          cp "$APK" \
+            release/PisoTab-DPC-Android11-16-debug.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
